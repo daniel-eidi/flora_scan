@@ -3,6 +3,13 @@ export interface Location {
   latitude: number;
   longitude: number;
   timestamp: number;
+  accuracy?: number; // Precisão em metros
+}
+
+export interface GpsStatus {
+  accuracy: number | null;
+  isActive: boolean;
+  lastUpdate: number | null;
 }
 
 export interface ReportEntryData {
