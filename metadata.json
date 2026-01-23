@@ -1,0 +1,8 @@
+{
+  "name": "BioScan - Identificador de Plantas",
+  "description": "Um assistente inteligente para identificar plantas e árvores através de fotos, fornecendo detalhes botânicos e solicitando informações adicionais para maior precisão.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
