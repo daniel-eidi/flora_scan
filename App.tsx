@@ -1,10 +1,11 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Message, Location, IdentificationStatus, PlantData, ReportEntryData } from './types';
+import { Message, Location, IdentificationStatus, PlantData, ReportEntryData, GpsStatus } from './types';
 import { identifyPlant } from './services/geminiService';
 import ImageInput from './components/ImageInput';
 import PlantIdentificationResult from './components/PlantIdentificationResult';
 import ReportModal from './components/ReportModal';
+import GpsStatusIndicator from './components/GpsStatusIndicator';
 import { FileText } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -17,13 +18,55 @@ const App: React.FC = () => {
   ]);
   const [status, setStatus] = useState<IdentificationStatus>(IdentificationStatus.IDLE);
   const [isReportOpen, setIsReportOpen] = useState(false);
+  const [gpsStatus, setGpsStatus] = useState<GpsStatus>({
+    accuracy: null,
+    isActive: false,
+    lastUpdate: null,
+  });
   const scrollRef = useRef<HTMLDivElement>(null);
+  const watchIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, status]);
+
+  // Monitorar GPS continuamente
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setGpsStatus({ accuracy: null, isActive: false, lastUpdate: null });
+      return;
+    }
+
+    const handlePosition = (pos: GeolocationPosition) => {
+      setGpsStatus({
+        accuracy: pos.coords.accuracy,
+        isActive: true,
+        lastUpdate: pos.timestamp,
+      });
+    };
+
+    const handleError = () => {
+      setGpsStatus(prev => ({
+        ...prev,
+        isActive: false,
+      }));
+    };
+
+    // Iniciar monitoramento contínuo
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      handlePosition,
+      handleError,
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
+    );
+
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
+  }, []);
 
   const getLocation = (): Promise<Location | undefined> => {
     return new Promise((resolve) => {
@@ -37,6 +80,7 @@ const App: React.FC = () => {
             latitude: pos.coords.latitude,
             longitude: pos.coords.longitude,
             timestamp: pos.timestamp,
+            accuracy: pos.coords.accuracy,
           });
         },
         () => resolve(undefined),
@@ -107,26 +151,32 @@ const App: React.FC = () => {
   return (
     <div className="flex flex-col h-screen max-w-2xl mx-auto bg-gray-50 shadow-2xl overflow-hidden">
       {/* Header */}
-      <header className="bg-emerald-800 text-white p-4 flex items-center justify-between shadow-md z-10">
-        <div className="flex items-center gap-3">
-          <div className="bg-white/20 p-2 rounded-lg">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a10 10 0 0 1 10 10c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2z"/><path d="M12 6v6l4 2"/></svg>
+      <header className="bg-emerald-800 text-white p-4 shadow-md z-10">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="bg-white/20 p-2 rounded-lg">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a10 10 0 0 1 10 10c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2z"/><path d="M12 6v6l4 2"/></svg>
+            </div>
+            <div>
+              <h1 className="font-bold text-lg leading-tight">BioScan AI</h1>
+              <p className="text-emerald-100 text-xs">Seu guia botânico portátil</p>
+            </div>
           </div>
-          <div>
-            <h1 className="font-bold text-lg leading-tight">BioScan AI</h1>
-            <p className="text-emerald-100 text-xs">Seu guia botânico portátil</p>
+
+          <div className="flex items-center gap-2">
+            <GpsStatusIndicator gpsStatus={gpsStatus} />
+
+            {selectedForReport.length > 0 && (
+              <button
+                onClick={() => setIsReportOpen(true)}
+                className="flex items-center gap-2 px-3 py-2 bg-white text-emerald-800 rounded-xl font-bold text-sm shadow-lg hover:bg-emerald-50 transition-all active:scale-95"
+              >
+                <FileText size={16} />
+                <span>Relatório ({selectedForReport.length})</span>
+              </button>
+            )}
           </div>
         </div>
-        
-        {selectedForReport.length > 0 && (
-          <button 
-            onClick={() => setIsReportOpen(true)}
-            className="flex items-center gap-2 px-3 py-2 bg-white text-emerald-800 rounded-xl font-bold text-sm shadow-lg hover:bg-emerald-50 transition-all active:scale-95"
-          >
-            <FileText size={16} />
-            <span>Relatório ({selectedForReport.length})</span>
-          </button>
-        )}
       </header>
 
       {/* Chat Area */}
