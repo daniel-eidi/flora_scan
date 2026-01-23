@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { PlantData, Location } from '../types';
+import LocationMiniMap from './LocationMiniMap';
 
 interface PlantIdentificationResultProps {
   data: PlantData;
@@ -48,20 +49,14 @@ const PlantIdentificationResult: React.FC<PlantIdentificationResultProps> = ({
           </div>
         )}
 
-        <div className="mt-3 pt-3 border-t border-emerald-200 flex justify-between items-center">
-          {location ? (
-            <div className="flex items-center gap-2 text-[10px] text-emerald-600 font-mono">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-              <span>{location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}</span>
-            </div>
-          ) : <div />}
-          
+        {/* Botão de seleção para relatório */}
+        <div className="mt-3 pt-3 border-t border-emerald-200 flex justify-end">
           {onToggleSelect && (
-            <button 
+            <button
               onClick={(e) => { e.stopPropagation(); onToggleSelect(); }}
               className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition-colors ${
-                isSelected 
-                ? 'bg-emerald-600 text-white' 
+                isSelected
+                ? 'bg-emerald-600 text-white'
                 : 'bg-white border border-emerald-600 text-emerald-600 hover:bg-emerald-50'
               }`}
             >
@@ -70,6 +65,11 @@ const PlantIdentificationResult: React.FC<PlantIdentificationResultProps> = ({
           )}
         </div>
       </div>
+
+      {/* Mini-mapa com localização */}
+      {location && (
+        <LocationMiniMap location={location} />
+      )}
     </div>
   );
 };
