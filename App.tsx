@@ -22,6 +22,7 @@ const App: React.FC = () => {
     accuracy: null,
     isActive: false,
     lastUpdate: null,
+    permissionState: 'prompt',
   });
   const scrollRef = useRef<HTMLDivElement>(null);
   const watchIdRef = useRef<number | null>(null);
@@ -32,11 +33,46 @@ const App: React.FC = () => {
     }
   }, [messages, status]);
 
-  // Monitorar GPS continuamente
+  // Verificar estado de permissão inicial
   useEffect(() => {
     if (!navigator.geolocation) {
-      setGpsStatus({ accuracy: null, isActive: false, lastUpdate: null });
+      setGpsStatus(prev => ({ ...prev, permissionState: 'unavailable' }));
       return;
+    }
+
+    // Verificar permissão usando Permissions API se disponível
+    if (navigator.permissions) {
+      navigator.permissions.query({ name: 'geolocation' }).then((result) => {
+        setGpsStatus(prev => ({
+          ...prev,
+          permissionState: result.state as 'prompt' | 'granted' | 'denied',
+        }));
+
+        // Se já tiver permissão, iniciar monitoramento
+        if (result.state === 'granted') {
+          startGpsWatch();
+        }
+
+        // Escutar mudanças de permissão
+        result.onchange = () => {
+          setGpsStatus(prev => ({
+            ...prev,
+            permissionState: result.state as 'prompt' | 'granted' | 'denied',
+          }));
+          if (result.state === 'granted') {
+            startGpsWatch();
+          }
+        };
+      }).catch(() => {
+        // Fallback se Permissions API não funcionar
+        setGpsStatus(prev => ({ ...prev, permissionState: 'prompt' }));
+      });
+    }
+  }, []);
+
+  const startGpsWatch = useCallback(() => {
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
     }
 
     const handlePosition = (pos: GeolocationPosition) => {
@@ -44,29 +80,71 @@ const App: React.FC = () => {
         accuracy: pos.coords.accuracy,
         isActive: true,
         lastUpdate: pos.timestamp,
+        permissionState: 'granted',
       });
     };
 
-    const handleError = () => {
-      setGpsStatus(prev => ({
-        ...prev,
-        isActive: false,
-      }));
+    const handleError = (error: GeolocationPositionError) => {
+      if (error.code === error.PERMISSION_DENIED) {
+        setGpsStatus(prev => ({
+          ...prev,
+          isActive: false,
+          permissionState: 'denied',
+        }));
+      } else {
+        setGpsStatus(prev => ({
+          ...prev,
+          isActive: false,
+        }));
+      }
     };
 
-    // Iniciar monitoramento contínuo
     watchIdRef.current = navigator.geolocation.watchPosition(
       handlePosition,
       handleError,
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
     );
+  }, []);
 
+  // Cleanup ao desmontar
+  useEffect(() => {
     return () => {
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
     };
   }, []);
+
+  const requestGpsPermission = useCallback(() => {
+    if (!navigator.geolocation) {
+      setGpsStatus(prev => ({ ...prev, permissionState: 'unavailable' }));
+      return;
+    }
+
+    // Solicitar localização - isso vai pedir permissão ao usuário
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setGpsStatus({
+          accuracy: pos.coords.accuracy,
+          isActive: true,
+          lastUpdate: pos.timestamp,
+          permissionState: 'granted',
+        });
+        // Iniciar monitoramento contínuo após obter permissão
+        startGpsWatch();
+      },
+      (error) => {
+        if (error.code === error.PERMISSION_DENIED) {
+          setGpsStatus(prev => ({
+            ...prev,
+            isActive: false,
+            permissionState: 'denied',
+          }));
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }, [startGpsWatch]);
 
   const getLocation = (): Promise<Location | undefined> => {
     return new Promise((resolve) => {
@@ -164,7 +242,7 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            <GpsStatusIndicator gpsStatus={gpsStatus} />
+            <GpsStatusIndicator gpsStatus={gpsStatus} onRequestPermission={requestGpsPermission} />
 
             {selectedForReport.length > 0 && (
               <button
