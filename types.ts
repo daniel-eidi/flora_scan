@@ -10,6 +10,7 @@ export interface GpsStatus {
   accuracy: number | null;
   isActive: boolean;
   lastUpdate: number | null;
+  permissionState: 'prompt' | 'granted' | 'denied' | 'unavailable';
 }
 
 export interface ReportEntryData {
