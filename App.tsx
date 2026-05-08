@@ -1,12 +1,15 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Message, Location, IdentificationStatus, PlantData, ReportEntryData, GpsStatus } from './types';
-import { identifyPlant } from './services/geminiService';
+import { identifyPlant, UnauthorizedError } from './services/geminiService';
 import ImageInput from './components/ImageInput';
 import PlantIdentificationResult from './components/PlantIdentificationResult';
 import ReportModal from './components/ReportModal';
 import GpsStatusIndicator from './components/GpsStatusIndicator';
+import LoginScreen from './components/LoginScreen';
 import { FileText } from 'lucide-react';
+
+const ACCESS_TOKEN_KEY = 'bioscan_access_token';
 
 const App: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([
@@ -17,6 +20,7 @@ const App: React.FC = () => {
     }
   ]);
   const [status, setStatus] = useState<IdentificationStatus>(IdentificationStatus.IDLE);
+  const [accessToken, setAccessToken] = useState<string | null>(() => localStorage.getItem(ACCESS_TOKEN_KEY));
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [gpsStatus, setGpsStatus] = useState<GpsStatus>({
     accuracy: null,
@@ -185,13 +189,13 @@ const App: React.FC = () => {
     setMessages(prev => [...prev, userMessage]);
 
     try {
-      const result = await identifyPlant(base64Image);
-      
+      const result = await identifyPlant(base64Image, accessToken ?? '');
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: result.precisaMaisInfo 
-          ? `Identifiquei como ${result.nomeComum}, mas para ter certeza absoluta, ${result.sugestao?.toLowerCase() || 'preciso de mais detalhes'}.` 
+        content: result.precisaMaisInfo
+          ? `Identifiquei como ${result.nomeComum}, mas para ter certeza absoluta, ${result.sugestao?.toLowerCase() || 'preciso de mais detalhes'}.`
           : `Tudo pronto! Esta é uma ${result.nomeComum}.`,
         plantData: result,
         location: currentLocation,
@@ -202,6 +206,11 @@ const App: React.FC = () => {
       setStatus(IdentificationStatus.SUCCESS);
     } catch (error) {
       console.error(error);
+      if (error instanceof UnauthorizedError) {
+        localStorage.removeItem(ACCESS_TOKEN_KEY);
+        setAccessToken(null);
+        return;
+      }
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -211,6 +220,21 @@ const App: React.FC = () => {
       setStatus(IdentificationStatus.ERROR);
     }
   };
+
+  const handleLogin = useCallback(async (token: string): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Access-Token': token },
+      });
+      if (!res.ok) return false;
+      localStorage.setItem(ACCESS_TOKEN_KEY, token);
+      setAccessToken(token);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
 
   const toggleMessageSelection = (id: string) => {
     setMessages(prev => prev.map(m =>
@@ -225,6 +249,10 @@ const App: React.FC = () => {
   }, []);
 
   const selectedForReport = messages.filter(m => m.role === 'assistant' && m.plantData && m.selectedForReport);
+
+  if (!accessToken) {
+    return <LoginScreen onSubmit={handleLogin} />;
+  }
 
   return (
     <div className="flex flex-col h-screen max-w-2xl mx-auto bg-gray-50 shadow-2xl overflow-hidden">

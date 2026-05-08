@@ -34,6 +34,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  const expectedToken = process.env.APP_ACCESS_TOKEN;
+  if (!expectedToken) {
+    return res.status(500).json({ error: 'APP_ACCESS_TOKEN não configurado no servidor.' });
+  }
+  const providedToken = req.headers['x-access-token'];
+  if (providedToken !== expectedToken) {
+    return res.status(401).json({ error: 'Token de acesso inválido.' });
+  }
+
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return res.status(500).json({ error: 'GEMINI_API_KEY não configurada no servidor.' });
