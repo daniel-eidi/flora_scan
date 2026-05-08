@@ -14,11 +14,13 @@ const ImageInput: React.FC<ImageInputProps> = ({ onImageSelected, disabled }) =>
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      console.info(`[ImageInput] arquivo: ${file.name} ${file.type} ${Math.round(file.size / 1024)} KB`);
       try {
         const resized = await resizeImage(file, 1280, 0.85);
+        console.info(`[ImageInput] redimensionado para ~${Math.round((resized.length * 3) / 4 / 1024)} KB`);
         onImageSelected(resized);
       } catch (err) {
-        console.error('Falha ao processar imagem, enviando original:', err);
+        console.error('[ImageInput] Falha ao redimensionar, enviando original:', err);
         const reader = new FileReader();
         reader.onloadend = () => onImageSelected(reader.result as string);
         reader.readAsDataURL(file);
