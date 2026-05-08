@@ -11,15 +11,55 @@ const ImageInput: React.FC<ImageInputProps> = ({ onImageSelected, disabled }) =>
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        onImageSelected(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const resized = await resizeImage(file, 1280, 0.85);
+        onImageSelected(resized);
+      } catch (err) {
+        console.error('Falha ao processar imagem, enviando original:', err);
+        const reader = new FileReader();
+        reader.onloadend = () => onImageSelected(reader.result as string);
+        reader.readAsDataURL(file);
+      }
     }
+    e.target.value = '';
+  };
+
+  const resizeImage = (file: File, maxDimension: number, quality: number): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        let { width, height } = img;
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Canvas indisponível'));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('Falha ao carregar imagem'));
+      };
+      img.src = url;
+    });
   };
 
   return (
