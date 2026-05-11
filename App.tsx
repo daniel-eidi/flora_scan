@@ -156,16 +156,27 @@ const App: React.FC = () => {
         resolve(undefined);
         return;
       }
+      let done = false;
+      const finish = (loc: Location | undefined) => {
+        if (done) return;
+        done = true;
+        resolve(loc);
+      };
+      const hardTimeout = window.setTimeout(() => finish(undefined), 6000);
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          resolve({
+          window.clearTimeout(hardTimeout);
+          finish({
             latitude: pos.coords.latitude,
             longitude: pos.coords.longitude,
             timestamp: pos.timestamp,
             accuracy: pos.coords.accuracy,
           });
         },
-        () => resolve(undefined),
+        () => {
+          window.clearTimeout(hardTimeout);
+          finish(undefined);
+        },
         { enableHighAccuracy: true, timeout: 5000 }
       );
     });
@@ -320,10 +331,16 @@ const App: React.FC = () => {
               )}
             </div>
             
-            {msg.location && msg.role === 'user' && (
-              <span className="text-[10px] text-gray-400 mt-1 mr-2 italic">
-                Localização: {msg.location.latitude.toFixed(4)}, {msg.location.longitude.toFixed(4)}
-              </span>
+            {msg.role === 'user' && (
+              msg.location ? (
+                <span className="text-[10px] text-gray-400 mt-1 mr-2 italic">
+                  Localização: {msg.location.latitude.toFixed(4)}, {msg.location.longitude.toFixed(4)}
+                </span>
+              ) : (
+                <span className="text-[10px] text-amber-600 mt-1 mr-2 italic">
+                  Sem localização (GPS indisponível)
+                </span>
+              )
             )}
           </div>
         ))}
