@@ -14,54 +14,61 @@ const ImageInput: React.FC<ImageInputProps> = ({ onImageSelected, disabled }) =>
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      console.info(`[ImageInput] arquivo: ${file.name} ${file.type} ${Math.round(file.size / 1024)} KB`);
+      console.info(`[ImageInput] arquivo: ${file.name || '(sem nome)'} ${file.type || '(sem mime)'} ${Math.round(file.size / 1024)} KB`);
       try {
         const resized = await resizeImage(file, 1280, 0.85);
         console.info(`[ImageInput] redimensionado para ~${Math.round((resized.length * 3) / 4 / 1024)} KB`);
         onImageSelected(resized);
       } catch (err) {
-        console.error('[ImageInput] Falha ao redimensionar, enviando original:', err);
-        const reader = new FileReader();
-        reader.onloadend = () => onImageSelected(reader.result as string);
-        reader.readAsDataURL(file);
+        console.error('[ImageInput] Falha ao processar imagem:', err);
+        const msg = err instanceof Error ? err.message : 'erro desconhecido';
+        alert(`Não consegui processar esta imagem (${msg}). Tente outra foto, em JPEG ou PNG.`);
       }
     }
     e.target.value = '';
   };
 
-  const resizeImage = (file: File, maxDimension: number, quality: number): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const url = URL.createObjectURL(file);
-      const img = new Image();
-      img.onload = () => {
-        URL.revokeObjectURL(url);
-        let { width, height } = img;
-        if (width > maxDimension || height > maxDimension) {
-          if (width > height) {
-            height = Math.round((height * maxDimension) / width);
-            width = maxDimension;
-          } else {
-            width = Math.round((width * maxDimension) / height);
-            height = maxDimension;
-          }
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          reject(new Error('Canvas indisponível'));
-          return;
-        }
-        ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', quality));
-      };
-      img.onerror = () => {
-        URL.revokeObjectURL(url);
-        reject(new Error('Falha ao carregar imagem'));
-      };
-      img.src = url;
+  const readFileAsDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error ?? new Error('FileReader falhou'));
+      reader.readAsDataURL(file);
     });
+
+  const loadImage = (src: string): Promise<HTMLImageElement> =>
+    new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Imagem não pôde ser decodificada pelo navegador'));
+      img.src = src;
+    });
+
+  const resizeImage = async (file: File, maxDimension: number, quality: number): Promise<string> => {
+    const dataUrl = await readFileAsDataUrl(file);
+    const img = await loadImage(dataUrl);
+
+    let { width, height } = img;
+    if (width === 0 || height === 0) {
+      throw new Error('Dimensões inválidas');
+    }
+    if (width > maxDimension || height > maxDimension) {
+      if (width > height) {
+        height = Math.round((height * maxDimension) / width);
+        width = maxDimension;
+      } else {
+        width = Math.round((width * maxDimension) / height);
+        height = maxDimension;
+      }
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas indisponível');
+    ctx.drawImage(img, 0, 0, width, height);
+    return canvas.toDataURL('image/jpeg', quality);
   };
 
   return (
