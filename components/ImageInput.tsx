@@ -44,31 +44,48 @@ const ImageInput: React.FC<ImageInputProps> = ({ onImageSelected, disabled }) =>
       img.src = src;
     });
 
-  const resizeImage = async (file: File, maxDimension: number, quality: number): Promise<string> => {
-    const dataUrl = await readFileAsDataUrl(file);
-    const img = await loadImage(dataUrl);
+  const computeTargetSize = (w: number, h: number, max: number) => {
+    if (w === 0 || h === 0) throw new Error('Dimensões inválidas');
+    if (w <= max && h <= max) return { width: w, height: h };
+    return w > h
+      ? { width: max, height: Math.round((h * max) / w) }
+      : { width: Math.round((w * max) / h), height: max };
+  };
 
-    let { width, height } = img;
-    if (width === 0 || height === 0) {
-      throw new Error('Dimensões inválidas');
-    }
-    if (width > maxDimension || height > maxDimension) {
-      if (width > height) {
-        height = Math.round((height * maxDimension) / width);
-        width = maxDimension;
-      } else {
-        width = Math.round((width * maxDimension) / height);
-        height = maxDimension;
-      }
-    }
-
+  const drawToJpeg = (
+    source: HTMLImageElement | ImageBitmap,
+    width: number,
+    height: number,
+    quality: number,
+  ): string => {
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas indisponível');
-    ctx.drawImage(img, 0, 0, width, height);
+    ctx.drawImage(source, 0, 0, width, height);
     return canvas.toDataURL('image/jpeg', quality);
+  };
+
+  const resizeImage = async (file: File, maxDimension: number, quality: number): Promise<string> => {
+    if (typeof createImageBitmap === 'function') {
+      try {
+        const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' } as ImageBitmapOptions);
+        try {
+          const { width, height } = computeTargetSize(bitmap.width, bitmap.height, maxDimension);
+          return drawToJpeg(bitmap, width, height, quality);
+        } finally {
+          bitmap.close();
+        }
+      } catch (err) {
+        console.warn('[ImageInput] createImageBitmap falhou, tentando fallback <img>:', err);
+      }
+    }
+
+    const dataUrl = await readFileAsDataUrl(file);
+    const img = await loadImage(dataUrl);
+    const { width, height } = computeTargetSize(img.width, img.height, maxDimension);
+    return drawToJpeg(img, width, height, quality);
   };
 
   return (
